@@ -3,7 +3,7 @@ Metrics for evaluating GAN performance and signature verification.
 """
 
 import numpy as np
-import torch
+from scipy import linalg
 from sklearn.metrics import roc_curve, auc
 
 
@@ -22,14 +22,16 @@ def calculate_fid_simple(real_features, fake_features):
     mu_real = np.mean(real_features, axis=0)
     mu_fake = np.mean(fake_features, axis=0)
     
-    sigma_real = np.cov(real_features, rowvar=False)
-    sigma_fake = np.cov(fake_features, rowvar=False)
+    sigma_real = np.atleast_2d(np.cov(real_features, rowvar=False))
+    sigma_fake = np.atleast_2d(np.cov(fake_features, rowvar=False))
     
     # Calculate FID
     diff = mu_real - mu_fake
     
-    # Product of covariances
-    covmean = np.sqrt(sigma_real @ sigma_fake)
+    # Matrix square root of the covariance product, as the FID formula
+    # requires (np.sqrt would be an element-wise root and yields NaN
+    # whenever the product has negative entries).
+    covmean, _ = linalg.sqrtm(sigma_real @ sigma_fake, disp=False)
     
     # Handle numerical issues
     if np.iscomplexobj(covmean):
@@ -37,7 +39,7 @@ def calculate_fid_simple(real_features, fake_features):
     
     fid = diff @ diff + np.trace(sigma_real + sigma_fake - 2 * covmean)
     
-    return fid
+    return float(fid)
 
 
 def calculate_verification_metrics(y_true, y_scores):

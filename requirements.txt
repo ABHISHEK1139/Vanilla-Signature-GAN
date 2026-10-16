@@ -1,7 +1,7 @@
 # Requirements for Vanilla GAN Signature Generator
 
 # Deep Learning
-torch>=1.9.0
+torch>=1.13.0
 torchvision>=0.10.0
 
 # Image Processing
@@ -11,6 +11,7 @@ opencv-python>=4.5.0
 # Data & Computation
 numpy>=1.19.0
 scipy>=1.7.0
+scikit-learn>=1.0.0
 
 # Visualization
 matplotlib>=3.4.0
@@ -23,6 +24,3 @@ streamlit==1.52.2
 
 # REST API (Flask)
 flask>=2.0.0
-
-# FID Calculation
-pytorch-fid>=0.2.0

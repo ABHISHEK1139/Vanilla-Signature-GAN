@@ -107,8 +107,13 @@ class DiscriminatorAblation(nn.Module):
         return self.classifier(features)
 
 
-def run_ablation_experiment(config, dataloader, device, num_epochs=50, output_dir='../figures'):
+def run_ablation_experiment(config, dataloader, device, num_epochs=50, output_dir=None):
     """Run a single ablation experiment."""
+    
+    if output_dir is None:
+        output_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'figures'
+        )
     
     # Create models
     generator = GeneratorAblation(
@@ -257,12 +262,15 @@ def run_ablation_studies(args):
 
 
 def main():
+    # Anchor default paths to the repo root so the script works from any cwd.
+    REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
     parser = argparse.ArgumentParser(description="Ablation Studies for Vanilla GAN")
     
     parser.add_argument('--data_dir', type=str,
-                        default='../archive/data/data/real',
+                        default=os.path.join(REPO_ROOT, 'data', 'real'),
                         help='Data directory')
-    parser.add_argument('--output_dir', type=str, default='../figures',
+    parser.add_argument('--output_dir', type=str, default=os.path.join(REPO_ROOT, 'figures'),
                         help='Output directory')
     parser.add_argument('--epochs', type=int, default=50,
                         help='Epochs per experiment')

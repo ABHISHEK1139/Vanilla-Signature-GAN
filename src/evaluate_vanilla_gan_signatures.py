@@ -34,7 +34,9 @@ def evaluate_gan(args):
     # Load generator
     print(f"\nLoading generator from: {args.model_path}")
     generator = Generator(latent_dim=args.latent_dim, img_channels=1).to(device)
-    generator.load_state_dict(torch.load(args.model_path, map_location=device))
+    # weights_only=True: the file must be a plain state_dict saved by
+    # torch.save(model.state_dict()); no arbitrary unpickling needed.
+    generator.load_state_dict(torch.load(args.model_path, map_location=device, weights_only=True))
     generator.eval()
     
     # Load real data for comparison
@@ -139,15 +141,18 @@ def evaluate_gan(args):
 
 
 def main():
+    # Anchor default paths to the repo root so the script works from any cwd.
+    REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
     parser = argparse.ArgumentParser(description="Evaluate Vanilla GAN")
     
     parser.add_argument('--model_path', type=str, 
-                        default='../checkpoints/G_final.pth',
+                        default=os.path.join(REPO_ROOT, 'checkpoints', 'G_final.pth'),
                         help='Path to trained generator')
     parser.add_argument('--data_dir', type=str,
-                        default='../archive/data/data/real',
+                        default=os.path.join(REPO_ROOT, 'data', 'real'),
                         help='Directory with real signatures')
-    parser.add_argument('--output_dir', type=str, default='../figures',
+    parser.add_argument('--output_dir', type=str, default=os.path.join(REPO_ROOT, 'figures'),
                         help='Output directory')
     parser.add_argument('--num_samples', type=int, default=500,
                         help='Number of samples to generate')
@@ -161,6 +166,15 @@ def main():
                         help='Use GPU')
     
     args = parser.parse_args()
+    
+    # The generator/discriminator architectures are hardcoded for 64x64
+    # inputs; fail fast instead of crashing mid-evaluation on a shape error.
+    if args.image_size != 64:
+        raise ValueError(
+            f"--image_size must be 64 (got {args.image_size}): "
+            "the GAN architectures only support 64x64 images."
+        )
+    
     evaluate_gan(args)
 
 

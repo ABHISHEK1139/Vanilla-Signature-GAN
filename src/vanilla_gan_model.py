@@ -186,7 +186,9 @@ class VanillaGAN:
         Returns:
             Epoch number from checkpoint
         """
-        checkpoint = torch.load(filepath, map_location=self.device)
+        # weights_only=True: checkpoints saved by save_checkpoint() are plain
+        # dicts of tensors/ints, so unpickling arbitrary objects is unnecessary.
+        checkpoint = torch.load(filepath, map_location=self.device, weights_only=True)
         self.generator.load_state_dict(checkpoint['generator_state_dict'])
         self.discriminator.load_state_dict(checkpoint['discriminator_state_dict'])
         self.optimizer_G.load_state_dict(checkpoint['optimizer_G_state_dict'])

@@ -8,7 +8,6 @@ import os
 import sys
 import argparse
 import torch
-import numpy as np
 from tqdm import tqdm
 import glob
 
@@ -62,6 +61,11 @@ def train_gan(args):
         image_size=args.image_size,
         num_workers=args.num_workers
     )
+    if len(dataloader) == 0:
+        raise RuntimeError(
+            f"No training batches from {args.data_dir} with batch_size={args.batch_size} "
+            "(need at least batch_size images; drop_last=True)."
+        )
     print(f"Number of batches: {len(dataloader)}")
     
     # Initialize GAN
@@ -110,7 +114,7 @@ def train_gan(args):
         # Progress bar
         pbar = tqdm(dataloader, desc=f"Epoch {epoch}/{args.epochs}")
         
-        for batch_idx, real_images in enumerate(pbar):
+        for real_images in pbar:
             batch_size = real_images.size(0)
             
             # Add small Gaussian noise to real images (stabilization)
@@ -199,11 +203,16 @@ def train_gan(args):
 
 
 def main():
+    # Anchor default paths to the repo root so the documented
+    # `python src/train_vanilla_gan_signatures.py` (run from the repo root)
+    # writes outputs inside the repo instead of next to it.
+    REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
     parser = argparse.ArgumentParser(description="Train Vanilla GAN for Signature Generation")
     
     # Data arguments
     parser.add_argument('--data_dir', type=str, 
-                        default='../../archive/data/data/real',
+                        default=os.path.join(REPO_ROOT, 'data', 'real'),
                         help='Directory containing training images')
     
     # Model arguments
@@ -235,11 +244,11 @@ def main():
                         help='Std of noise added to real images (default: 0.05)')
     
     # Output arguments
-    parser.add_argument('--checkpoint_dir', type=str, default='../checkpoints',
+    parser.add_argument('--checkpoint_dir', type=str, default=os.path.join(REPO_ROOT, 'checkpoints'),
                         help='Directory to save checkpoints')
-    parser.add_argument('--sample_dir', type=str, default='../samples',
+    parser.add_argument('--sample_dir', type=str, default=os.path.join(REPO_ROOT, 'samples'),
                         help='Directory to save sample images')
-    parser.add_argument('--log_dir', type=str, default='../logs',
+    parser.add_argument('--log_dir', type=str, default=os.path.join(REPO_ROOT, 'logs'),
                         help='Directory to save logs')
     parser.add_argument('--sample_interval', type=int, default=10,
                         help='Save samples every N epochs (default: 10)')
@@ -247,6 +256,14 @@ def main():
                         help='Save checkpoint every N epochs (default: 50)')
     
     args = parser.parse_args()
+    
+    # The generator/discriminator architectures are hardcoded for 64x64
+    # inputs; fail fast instead of crashing mid-training on a shape error.
+    if args.image_size != 64:
+        raise ValueError(
+            f"--image_size must be 64 (got {args.image_size}): "
+            "the GAN architectures only support 64x64 images."
+        )
     
     # Print configuration
     print("=" * 60)

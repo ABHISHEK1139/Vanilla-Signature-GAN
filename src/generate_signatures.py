@@ -38,7 +38,9 @@ def generate_signatures(args):
     # Load generator
     print(f"\nLoading generator from: {args.model_path}")
     generator = Generator(latent_dim=args.latent_dim, img_channels=1).to(device)
-    generator.load_state_dict(torch.load(args.model_path, map_location=device))
+    # weights_only=True: the file must be a plain state_dict saved by
+    # torch.save(model.state_dict()); no arbitrary unpickling needed.
+    generator.load_state_dict(torch.load(args.model_path, map_location=device, weights_only=True))
     generator.eval()
     
     # Generate signatures
@@ -50,7 +52,7 @@ def generate_signatures(args):
     generated_count = 0
     
     with torch.no_grad():
-        for batch_idx in tqdm(range(num_batches)):
+        for _ in tqdm(range(num_batches)):
             # Calculate batch size for last batch
             current_batch_size = min(batch_size, args.num_signatures - generated_count)
             
@@ -81,13 +83,16 @@ def generate_signatures(args):
 
 
 def main():
+    # Anchor default paths to the repo root so the script works from any cwd.
+    REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
     parser = argparse.ArgumentParser(description="Generate Synthetic Signatures")
     
     parser.add_argument('--model_path', type=str, 
-                        default='../checkpoints/G_final.pth',
+                        default=os.path.join(REPO_ROOT, 'checkpoints', 'G_final.pth'),
                         help='Path to trained generator model')
     parser.add_argument('--output_dir', type=str, 
-                        default='../data/synthetic',
+                        default=os.path.join(REPO_ROOT, 'data', 'synthetic'),
                         help='Output directory for generated signatures')
     parser.add_argument('--num_signatures', '-n', type=int, default=100,
                         help='Number of signatures to generate')

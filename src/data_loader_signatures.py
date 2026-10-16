@@ -5,9 +5,7 @@ Loads preprocessed signature images for GAN training.
 
 import os
 import glob
-import numpy as np
 from PIL import Image
-import torch
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 
@@ -28,8 +26,19 @@ class SignatureDataset(Dataset):
         self.image_size = image_size
         self.image_paths = []
         
+        if not os.path.isdir(data_dir):
+            raise RuntimeError(
+                f"Data directory not found: {data_dir}. "
+                "Pass a valid --data_dir (e.g. a directory of preprocessed signature images)."
+            )
+        
         # Collect all image paths from subdirectories (cropped signatures)
         self._collect_image_paths()
+        
+        if len(self.image_paths) == 0:
+            raise RuntimeError(
+                f"No signature images (*.jpg/*.jpeg/*.png) found under {data_dir}."
+            )
         
         # Default transform: resize, convert to tensor, normalize to [-1, 1]
         if transform is None:
@@ -86,8 +95,10 @@ class SignatureDataset(Dataset):
             return image
         except Exception as e:
             print(f"Error loading {img_path}: {e}")
-            # Return a random image if this one fails
-            return self.__getitem__((idx + 1) % len(self))
+            # Fail loudly instead of recursing to the next image: unbounded
+            # recursion over a dataset with several corrupt files ends in
+            # RecursionError, and an empty dataset ends in ZeroDivisionError.
+            raise RuntimeError(f"Failed to load image: {img_path}") from e
 
 
 class SignatureVerificationDataset(Dataset):
@@ -106,6 +117,13 @@ class SignatureVerificationDataset(Dataset):
         self.image_size = image_size
         self.pairs = []
         
+        for label, data_dir in (("real", real_dir), ("forged", forged_dir)):
+            if not os.path.isdir(data_dir):
+                raise RuntimeError(
+                    f"{label} data directory not found: {data_dir}. "
+                    f"Pass a valid --{label}_dir."
+                )
+        
         # Default transform
         if transform is None:
             self.transform = transforms.Compose([
@@ -123,6 +141,12 @@ class SignatureVerificationDataset(Dataset):
         
         # Create pairs
         self._create_pairs()
+        
+        if len(self.pairs) == 0:
+            raise RuntimeError(
+                f"No verification pairs could be created from {real_dir} and {forged_dir}: "
+                "need at least 2 real signature images."
+            )
         
         print(f"Created {len(self.pairs)} verification pairs")
     
@@ -226,10 +250,13 @@ if __name__ == "__main__":
     # Test data loader
     import sys
     
+    # Anchor to the repo root so the script works from any cwd
+    REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
     if len(sys.argv) > 1:
         data_dir = sys.argv[1]
     else:
-        data_dir = "../archive/data/data/real"
+        data_dir = os.path.join(REPO_ROOT, "data", "real")
     
     loader = get_data_loader(data_dir, batch_size=16, image_size=64)
     

@@ -30,7 +30,9 @@ def load_generator(model_path, latent_dim=100):
     """Load and cache the generator model."""
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     generator = Generator(latent_dim=latent_dim, img_channels=1).to(device)
-    generator.load_state_dict(torch.load(model_path, map_location=device))
+    # weights_only=True: the file must be a plain state_dict saved by
+    # torch.save(model.state_dict()); no arbitrary unpickling needed.
+    generator.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
     generator.eval()
     return generator, device
 
@@ -96,7 +98,7 @@ def main():
         st.sidebar.error("No .pth models found in checkpoints folder!")
         model_path = st.sidebar.text_input(
             "Model Path (Manual Entry)",
-            value="../checkpoints/G_final.pth"
+            value=os.path.join(checkpoints_dir, "G_final.pth")
         )
     
     latent_dim = st.sidebar.number_input(

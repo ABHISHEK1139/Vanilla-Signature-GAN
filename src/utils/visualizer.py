@@ -2,7 +2,6 @@
 Visualization utilities for GAN training and evaluation.
 """
 
-import os
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
@@ -122,7 +121,14 @@ def visualize_comparison(real_images, fake_images, save_path, n_samples=8):
         save_path: Path to save the comparison
         n_samples: Number of samples to show
     """
-    fig, axes = plt.subplots(2, n_samples, figsize=(2*n_samples, 4))
+    # Clamp to the available images and normalize the axes array so that
+    # n_samples=1 (axes shape (2, 1)) and short input batches don't IndexError.
+    n_samples = min(n_samples, len(real_images), len(fake_images))
+    if n_samples < 1:
+        raise ValueError("visualize_comparison needs at least 1 image per set")
+    
+    _, axes = plt.subplots(2, n_samples, figsize=(2*n_samples, 4))
+    axes = np.atleast_2d(axes)
     
     for i in range(n_samples):
         # Real images

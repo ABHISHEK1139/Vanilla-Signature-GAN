@@ -8,10 +8,8 @@ import sys
 import argparse
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, TensorDataset, ConcatDataset, random_split
 from tqdm import tqdm
-import numpy as np
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -125,18 +123,17 @@ def train_verifier(args):
     val_size = len(dataset) - train_size
     train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
     
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0)
-    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0)
-    
-    print(f"Training samples: {train_size}")
-    print(f"Validation samples: {val_size}")
-    
-    # Load GAN for augmentation if specified
-    synthetic_data = None
+    # GAN augmentation: the synthetic signatures are genuine-style, so turn
+    # them into genuine (label=1) pairs and merge them into the training set.
+    # Previously this flag generated images and then silently discarded them.
     if args.use_augmentation and args.generator_path:
         print(f"\nLoading generator for augmentation from: {args.generator_path}")
         generator = Generator(latent_dim=args.latent_dim, img_channels=1).to(device)
-        generator.load_state_dict(torch.load(args.generator_path, map_location=device))
+        # weights_only=True: the file must be a plain state_dict; no arbitrary
+        # unpickling needed.
+        generator.load_state_dict(
+            torch.load(args.generator_path, map_location=device, weights_only=True)
+        )
         
         # Generate synthetic data
         print(f"Generating {args.num_synthetic} synthetic signatures...")
@@ -144,6 +141,21 @@ def train_verifier(args):
             generator, args.num_synthetic, args.latent_dim, device
         )
         print(f"Synthetic data shape: {synthetic_data.shape}")
+        
+        num_syn = synthetic_data.size(0)
+        aug_img1 = synthetic_data
+        aug_img2 = synthetic_data[torch.randperm(num_syn)]
+        aug_labels = torch.ones(num_syn, dtype=torch.float32)
+        aug_dataset = TensorDataset(aug_img1, aug_img2, aug_labels)
+        train_dataset = ConcatDataset([train_dataset, aug_dataset])
+        print(f"Augmented training set with {num_syn} synthetic genuine pairs "
+              f"({len(train_dataset)} total samples)")
+    
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0)
+    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0)
+    
+    print(f"Training samples: {len(train_dataset)}")
+    print(f"Validation samples: {val_size}")
     
     # Initialize model
     print("\nInitializing Siamese Network...")
@@ -220,22 +232,25 @@ def train_verifier(args):
 
 
 def main():
+    # Anchor default paths to the repo root so the script works from any cwd.
+    REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
     parser = argparse.ArgumentParser(description="Train Signature Verification Model")
     
     parser.add_argument('--real_dir', type=str,
-                        default='../archive/data/data/real',
+                        default=os.path.join(REPO_ROOT, 'data', 'real'),
                         help='Directory with real signatures')
     parser.add_argument('--forged_dir', type=str,
-                        default='../archive/data/data/forged',
+                        default=os.path.join(REPO_ROOT, 'data', 'forged'),
                         help='Directory with forged signatures')
-    parser.add_argument('--output_dir', type=str, default='../checkpoints',
+    parser.add_argument('--output_dir', type=str, default=os.path.join(REPO_ROOT, 'checkpoints'),
                         help='Output directory')
     
     # Augmentation
     parser.add_argument('--use_augmentation', action='store_true',
                         help='Use GAN-generated signatures for augmentation')
     parser.add_argument('--generator_path', type=str,
-                        default='../checkpoints/G_final.pth',
+                        default=os.path.join(REPO_ROOT, 'checkpoints', 'G_final.pth'),
                         help='Path to trained generator')
     parser.add_argument('--num_synthetic', type=int, default=1000,
                         help='Number of synthetic samples')
@@ -255,6 +270,15 @@ def main():
                         help='Use GPU')
     
     args = parser.parse_args()
+    
+    # The Siamese CNN is hardcoded for 64x64 inputs; fail fast instead of
+    # crashing mid-training on a shape error.
+    if args.image_size != 64:
+        raise ValueError(
+            f"--image_size must be 64 (got {args.image_size}): "
+            "the verifier architecture only supports 64x64 images."
+        )
+    
     train_verifier(args)
 
 

@@ -35,12 +35,19 @@ def evaluate_verifier(args):
     )
     
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False, num_workers=0)
+    if len(dataset) == 0:
+        raise RuntimeError(
+            "No test pairs: check --real_dir and --forged_dir point to "
+            "directories containing signature images."
+        )
     print(f"Test samples: {len(dataset)}")
     
     # Load model
     print(f"\nLoading model from: {args.model_path}")
     model = SiameseNetwork(img_channels=1).to(device)
-    model.load_state_dict(torch.load(args.model_path, map_location=device))
+    # weights_only=True: the file must be a plain state_dict saved by
+    # torch.save(model.state_dict()); no arbitrary unpickling needed.
+    model.load_state_dict(torch.load(args.model_path, map_location=device, weights_only=True))
     model.eval()
     
     # Collect predictions
@@ -119,18 +126,21 @@ def evaluate_verifier(args):
 
 
 def main():
+    # Anchor default paths to the repo root so the script works from any cwd.
+    REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
     parser = argparse.ArgumentParser(description="Evaluate Signature Verification Model")
     
     parser.add_argument('--model_path', type=str,
-                        default='../checkpoints/best_verifier.pth',
+                        default=os.path.join(REPO_ROOT, 'checkpoints', 'best_verifier.pth'),
                         help='Path to trained model')
     parser.add_argument('--real_dir', type=str,
-                        default='../archive/data/data/real',
+                        default=os.path.join(REPO_ROOT, 'data', 'real'),
                         help='Directory with real signatures')
     parser.add_argument('--forged_dir', type=str,
-                        default='../archive/data/data/forged',
+                        default=os.path.join(REPO_ROOT, 'data', 'forged'),
                         help='Directory with forged signatures')
-    parser.add_argument('--output_dir', type=str, default='../figures',
+    parser.add_argument('--output_dir', type=str, default=os.path.join(REPO_ROOT, 'figures'),
                         help='Output directory')
     parser.add_argument('--batch_size', type=int, default=32,
                         help='Batch size')
@@ -140,6 +150,15 @@ def main():
                         help='Use GPU')
     
     args = parser.parse_args()
+    
+    # The Siamese CNN is hardcoded for 64x64 inputs; fail fast instead of
+    # crashing mid-evaluation on a shape error.
+    if args.image_size != 64:
+        raise ValueError(
+            f"--image_size must be 64 (got {args.image_size}): "
+            "the verifier architecture only supports 64x64 images."
+        )
+    
     evaluate_verifier(args)
 
 

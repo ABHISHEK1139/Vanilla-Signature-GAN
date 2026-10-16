@@ -33,7 +33,9 @@ def load_model(model_path, z_dim=100):
     latent_dim = z_dim
     
     generator = Generator(latent_dim=latent_dim, img_channels=1).to(device)
-    generator.load_state_dict(torch.load(model_path, map_location=device))
+    # weights_only=True: the file must be a plain state_dict saved by
+    # torch.save(model.state_dict()); no arbitrary unpickling needed.
+    generator.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
     generator.eval()
     
     print(f"Model loaded on {device}")
@@ -94,11 +96,15 @@ def generate():
         return jsonify({'success': False, 'error': 'Model not loaded'}), 500
     
     # Parse request
-    data = request.get_json() or {}
-    num_signatures = data.get('n', 1)
+    data = request.get_json(silent=True) or {}
     output_format = data.get('format', 'base64')
     
-    # Validate
+    # Validate and coerce n: non-numeric input (str, null) must be a 400,
+    # not an uncaught TypeError inside min()/max().
+    try:
+        num_signatures = int(data.get('n', 1))
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': "Invalid 'n': must be an integer"}), 400
     num_signatures = min(max(1, num_signatures), 1000)  # Limit to 1-1000
     
     # Generate
@@ -182,9 +188,12 @@ def main():
     """Run the API server."""
     import argparse
     
+    # Anchor default paths to the repo root so the script works from any cwd.
+    REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
     parser = argparse.ArgumentParser(description="Signature Generation API")
     parser.add_argument('--model_path', type=str, 
-                        default='../checkpoints/G_final.pth',
+                        default=os.path.join(REPO_ROOT, 'checkpoints', 'G_final.pth'),
                         help='Path to trained generator')
     parser.add_argument('--latent_dim', type=int, default=100,
                         help='Latent dimension')
